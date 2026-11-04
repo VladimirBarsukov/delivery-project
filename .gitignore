@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+venv/
+.venv/
+env/
+
+# Django
+*.log
+db.sqlite3
+staticfiles/
+
+# Docker / база данных
+data/db/
+data/
+
+# Секреты и окружение
+.env
+.env.*
+*.env
+
+# macOS
+.DS_Store
+._*
+
+# IDE
+.vscode/
+.idea/

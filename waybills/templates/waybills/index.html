@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Доставки на сегодня</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+{% csrf_token %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="mb-0">🚚 Доставки на сегодня</h2>
+
+        <form method="post" action="/logout/" class="m-0">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline-secondary btn-sm">
+                Выйти
+            </button>
+        </form>
+    </div>
+
+    <table class="table table-striped align-middle">
+        <thead class="table-dark">
+            <tr>
+                <th style="width: 40px;"></th>
+                <th>Адрес</th>
+                <th class="d-none d-md-table-cell">Получатель</th>
+                <th class="d-none d-md-table-cell">Телефон</th>
+                <th>Статус</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody id="waybill-body"></tbody>
+    </table>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+<script>
+    const API_TODAY = "/api/waybills/today/";
+
+    // Соответствие статусов: цвет бейджа + подпись
+    const STATUS_STYLE = {
+        "created":     { color: "secondary", label: "Создаётся" },
+        "in_assembly": { color: "warning",   label: "В сборке" },
+        "ready":       { color: "success",   label: "Готова" },
+        "on_route":    { color: "primary",   label: "В пути" },
+        "delivered":   { color: "dark",      label: "Доставлена" },
+    };
+
+    function getCookie(name) {
+    const cookies = document.cookie.split(";");
+    for (let cookie of cookies) {
+        const [key, value] = cookie.trim().split("=");
+        if (key === name) return decodeURIComponent(value);
+    }
+    return null;
+    }
+
+    async function loadWaybills() {
+        const response = await fetch(API_TODAY);
+        const waybills = await response.json();
+        renderTable(waybills);
+    }
+
+    function renderTable(waybills) {
+        const tbody = document.getElementById("waybill-body");
+        tbody.innerHTML = "";
+
+        waybills.forEach((w, index) => {
+            const style = STATUS_STYLE[w.status] || { color: "secondary", label: w.status };
+            const tr = document.createElement("tr");
+            tr.dataset.id = w.id;
+
+            tr.innerHTML = `
+                <td>
+                    <span class="drag-handle" style="cursor: grab;">☰</span>
+                </td>
+                <td>${w.address}</td>
+                <td class="d-none d-md-table-cell">${w.recipient_name || "—"}</td>
+                <td class="d-none d-md-table-cell">${w.phone || "—"}</td>
+                <td><span class="badge bg-${style.color}">${style.label}</span></td>
+                <td>${actionButton(w)}</td>
+            `;
+
+            tbody.appendChild(tr);
+        });
+
+        initSortable();
+    }
+
+    function actionButton(w) {
+        if (w.status === "ready") {
+            return `<button class="btn btn-primary" onclick="changeStatus(${w.id}, 'on_route')">Выехал</button>`;
+        }
+        if (w.status === "on_route") {
+            return `<button class="btn btn-success" onclick="changeStatus(${w.id}, 'delivered')">Доставлен</button>`;
+        }
+        return "";
+    }
+
+    async function changeStatus(id, newStatus) {
+        const response = await fetch(`/api/waybills/${id}/status/`, {
+            method: "PATCH",
+            headers: {
+                "Content-Type": "application/json",
+                "X-CSRFToken": getCookie("csrftoken"),
+            },
+            body: JSON.stringify({ status: newStatus }),
+        });
+
+        if (!response.ok) {
+            const err = await response.json();
+            alert("Ошибка: " + (err.error || "не удалось изменить статус"));
+            return;
+        }
+
+        loadWaybills();   // перезагрузить таблицу
+    }
+
+    function initSortable() {
+        const tbody = document.getElementById("waybill-body");
+        new Sortable(tbody, {
+            handle: ".drag-handle",
+            animation: 150,
+            onEnd: async () => {
+                const ids = [...tbody.querySelectorAll("tr")].map(tr => parseInt(tr.dataset.id));
+                await fetch("/api/waybills/reorder/", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "X-CSRFToken": getCookie("csrftoken"), },
+                    body: JSON.stringify({ waybill_ids: ids }),
+                });
+                loadWaybills();
+            },
+        });
+    }
+
+    // Загружаем данные при открытии страницы
+    loadWaybills();
+
+    // И обновляем каждые 30 секунд (для актуальности)
+    setInterval(loadWaybills, 30000);
+</script>
+
+</body>
+</html>

@@ -1,0 +1,18 @@
+[
+    {
+        "external_id": "2001",
+        "address": "ул. Николаева, 12",
+        "recipient_name": "Сидоров А.В.",
+        "phone": "+7(999)111-22-33",
+        "status": "ready",
+        "comment": "Новая накладная из 1С"
+    },
+    {
+        "external_id": "2002",
+        "address": "ул. Багратиона, 45",
+        "recipient_name": "Иванова Е.С.",
+        "phone": "+7(999)444-55-66",
+        "status": "in_assembly",
+        "comment": ""
+    }
+]
