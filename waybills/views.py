@@ -1,3 +1,10 @@
+import json
+import os
+
+from django.conf import settings
+from django.utils import timezone
+
+from rest_framework.decorators import api_view, permission_classes
 from datetime import date
 
 from rest_framework.views import APIView
@@ -39,6 +46,9 @@ class UpdateStatus(APIView):
     }
 
     def patch(self, request, waybill_id):
+        if request.user.groups.filter(name="Менеджеры").exists():
+            return Response({"error": "Менеджерам запрещено менять статусы"}, status=403)
+
         try:
             waybill = Waybill.objects.get(id=waybill_id)
         except Waybill.DoesNotExist:
@@ -75,6 +85,10 @@ class ReorderWaybills(APIView):
     permission_classes = [IsAuthenticated]
     
     def post(self, request):
+
+        if request.user.groups.filter(name="Менеджеры").exists():
+            return Response({"error": "Менеджерам запрещено менять статусы"}, status=403)
+
         ids = request.data.get("waybill_ids")
         if not isinstance(ids, list) or not ids:
             return Response(
@@ -92,4 +106,47 @@ class ReorderWaybills(APIView):
 @login_required
 def index(request):
     """Страница водителя."""
-    return render(request, "waybills/index.html")
+    # Проверяем, состоит ли пользователь в группе "Менеджеры"
+    is_manager = request.user.groups.filter(name="Менеджеры").exists()
+    return render(request, "waybills/index.html", {"is_manager": is_manager})
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def sync_from_1c(request):
+    """Читает mock_1c_export.json и создает/обновляет накладные."""
+    file_path = os.path.join(settings.BASE_DIR, "mock_1c_export.json")
+    
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        return Response({"error": "Файл выгрузки не найден"}, status=404)
+    except json.JSONDecodeError:
+        return Response({"error": "Ошибка формата JSON"}, status=400)
+
+    created_count = 0
+    updated_count = 0
+
+    for item in data:
+        # Ищем накладную по ID из 1С
+        waybill, created = Waybill.objects.update_or_create(
+            external_id=item["external_id"],
+            defaults={
+                "address": item["address"],
+                "recipient_name": item.get("recipient_name", ""),
+                "phone": item.get("phone", ""),
+                "status": item.get("status", "created"),
+                "comment": item.get("comment", ""),
+                "date": timezone.now().date(),
+            }
+        )
+        if created:
+            created_count += 1
+        else:
+            updated_count += 1
+
+    return Response({
+        "success": True,
+        "created": created_count,
+        "updated": updated_count
+    })

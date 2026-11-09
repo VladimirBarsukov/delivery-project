@@ -12,12 +12,18 @@
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h2 class="mb-0">🚚 Доставки на сегодня</h2>
 
-        <form method="post" action="/logout/" class="m-0">
-            {% csrf_token %}
-            <button type="submit" class="btn btn-outline-secondary btn-sm">
-                Выйти
+        <div>
+            <button id="sync-btn" class="btn btn-outline-success btn-sm me-2">
+            Синхронизировать с 1С
             </button>
-        </form>
+
+            <form method="post" action="/logout/" class="m-0">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-outline-secondary btn-sm">
+                    Выйти
+                </button>
+            </form>
+        </div>
     </div>
 
     <table class="table table-striped align-middle">
@@ -39,7 +45,11 @@
 
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 <script>
+    const IS_MANAGER = {{ is_manager|yesno:"true,false" }};
+
     const API_TODAY = "/api/waybills/today/";
+
+    let sortableInstance = null;
 
     // Соответствие статусов: цвет бейджа + подпись
     const STATUS_STYLE = {
@@ -76,7 +86,7 @@
 
             tr.innerHTML = `
                 <td>
-                    <span class="drag-handle" style="cursor: grab;">☰</span>
+                    ${IS_MANAGER ? '' : '<span class="drag-handle" style="cursor: grab;">☰</span>'}
                 </td>
                 <td>${w.address}</td>
                 <td class="d-none d-md-table-cell">${w.recipient_name || "—"}</td>
@@ -92,6 +102,8 @@
     }
 
     function actionButton(w) {
+        if (IS_MANAGER) return ""; // Менеджеру кнопки не показываем //
+
         if (w.status === "ready") {
             return `<button class="btn btn-primary" onclick="changeStatus(${w.id}, 'on_route')">Выехал</button>`;
         }
@@ -121,23 +133,66 @@
     }
 
     function initSortable() {
+        if (IS_MANAGER) return;
+
         const tbody = document.getElementById("waybill-body");
-        new Sortable(tbody, {
+
+        // 👇 Уничтожаем старый экземпляр, если он был
+        if (sortableInstance) {
+            sortableInstance.destroy();
+            sortableInstance = null;
+        }
+
+        sortableInstance = new Sortable(tbody, {
             handle: ".drag-handle",
             animation: 150,
+            forceFallback: true,
+            fallbackTolerance: 5,
+            fallbackOnBody: true,   // 👈 клон будет в body, а не внутри tbody
             onEnd: async () => {
                 const ids = [...tbody.querySelectorAll("tr")].map(tr => parseInt(tr.dataset.id));
                 await fetch("/api/waybills/reorder/", {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json",
-                        "X-CSRFToken": getCookie("csrftoken"), },
+                        "X-CSRFToken": getCookie("csrftoken"),
+                    },
                     body: JSON.stringify({ waybill_ids: ids }),
                 });
                 loadWaybills();
             },
         });
     }
+
+    document.getElementById("sync-btn").addEventListener("click", async () => {
+    const btn = document.getElementById("sync-btn");
+    btn.disabled = true;
+    btn.textContent = "Синхронизация...";
+
+    try {
+        const response = await fetch("/api/waybills/sync/", {
+            method: "POST",
+            headers: {
+                "X-CSRFToken": getCookie("csrftoken"),
+            },
+        });
+
+        if (!response.ok) {
+            const err = await response.json();
+            alert("Ошибка: " + (err.error || "не удалось синхронизировать"));
+            return;
+        }
+
+        const result = await response.json();
+        alert(`Готово! Добавлено: ${result.created}, обновлено: ${result.updated}`);
+        loadWaybills();  // перезагружаем таблицу
+    } catch (e) {
+        alert("Ошибка сети: " + e.message);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = "Синхронизировать с 1С";
+    }
+    });
 
     // Загружаем данные при открытии страницы
     loadWaybills();
