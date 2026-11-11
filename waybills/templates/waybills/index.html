@@ -5,6 +5,30 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Доставки на сегодня</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <style>
+    /* Увеличиваем зону захвата для мобильных устройств */
+    .drag-handle {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 44px;           /* Стандартный размер для пальца */
+        height: 44px;          /* Стандартный размер для пальца */
+        cursor: grab;
+        font-size: 20px;       /* Делаем саму иконку чуть крупнее */
+        color: #6c757d;        /* Серый цвет, как у Bootstrap */
+        background-color: #f8f9fa; /* Легкий фон, чтобы было видно границы кнопки */
+        border-radius: 8px;    /* Скругленные углы */
+        user-select: none;     /* Запрещаем выделять текст при перетаскивании */
+        touch-action: none;    /* Важно! Запрещает скролл страницы при захвате */
+    }
+
+    /* Эффект при нажатии */
+    .drag-handle:active {
+        background-color: #e2e6ea;
+        cursor: grabbing;
+    }
+</style>
 </head>
 <body class="bg-light">
 {% csrf_token %}
@@ -149,6 +173,8 @@
             forceFallback: true,
             fallbackTolerance: 5,
             fallbackOnBody: true,   // 👈 клон будет в body, а не внутри tbody
+            delay: 100,                // 👈 задержка 100 мс
+        delayOnTouchOnly: true,    // 👈 задержка только на сенсорных экранах
             onEnd: async () => {
                 const ids = [...tbody.querySelectorAll("tr")].map(tr => parseInt(tr.dataset.id));
                 await fetch("/api/waybills/reorder/", {
