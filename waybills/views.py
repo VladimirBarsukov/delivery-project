@@ -20,6 +20,9 @@ from django.contrib.auth.decorators import login_required
 
 from rest_framework.permissions import IsAuthenticated
 
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
+
 
 class TodayWaybillList(APIView):
     """GET /api/waybills/today/ — накладные на сегодня и незавершённые с прошлых дней."""
@@ -74,6 +77,15 @@ class UpdateStatus(APIView):
         waybill.status = new_status
         waybill.need_sync = True   # помечаем для синхронизации с 1С
         waybill.save()
+                # Отправляем сигнал в WebSocket
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            "waybills_updates",  # Название комнаты (как в consumers.py)
+            {
+                "type": "waybill_update", # Имя метода в consumers.py
+                "waybill_id": waybill.id
+            }
+        )
 
         return Response(WaybillSerializer(waybill).data)
     
@@ -100,6 +112,15 @@ class ReorderWaybills(APIView):
         for index, waybill_id in enumerate(ids, start=1):
             count = Waybill.objects.filter(id=waybill_id).update(priority_order=index)
             updated += count
+
+                # Отправляем сигнал в WebSocket, что порядок изменен
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            "waybills_updates",
+            {
+                "type": "waybills_reordered" # <--- Новый тип события
+            }
+        )
 
         return Response({"updated": updated})
 

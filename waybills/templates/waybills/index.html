@@ -197,8 +197,42 @@
     // Загружаем данные при открытии страницы
     loadWaybills();
 
-    // И обновляем каждые 30 секунд (для актуальности)
-    setInterval(loadWaybills, 30000);
+        // === WebSockets ===
+    let ws;
+    
+    function connectWebSocket() {
+        const wsProtocol = window.location.protocol === "https:" ? "wss://" : "ws://";
+        ws = new WebSocket(wsProtocol + window.location.host + "/ws/waybills/");
+
+        ws.onopen = function() {
+            console.log("✅ WebSocket подключен!");
+        };
+
+        ws.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            // Если изменился статус ИЛИ порядок — перезагружаем таблицу
+            if (data.type === "waybill_updated" || data.type === "waybills_reordered") {
+                console.log("🔔 Получено обновление через WebSocket!", data);
+                loadWaybills(); 
+            }
+        };
+
+        ws.onclose = function(e) {
+            console.log('WebSocket закрыт. Пробуем переподключиться через 3 секунды...');
+            setTimeout(connectWebSocket, 3000); // Пытаемся подключиться снова
+        };
+        
+        ws.onerror = function(err) {
+            console.error('Ошибка WebSocket:', err);
+        };
+    }
+
+    // Запускаем подключение
+    connectWebSocket();
+
+    // Чтобы не грузить сервер каждые 30 секунд (polling), 
+    // можно отключить автообновление или оставить как страховку.
+    // setInterval(loadWaybills, 30000);
 </script>
 
 </body>

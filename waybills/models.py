@@ -32,7 +32,7 @@ class Waybill(models.Model):
     def __str__(self):
         return f"{self.external_id} — {self.address}"
     
-class Driver(models.Model):   # ← добавляем в конец файла
+class Driver(models.Model):
     user = models.OneToOneField(
         User, on_delete=models.CASCADE, related_name="driver"
     )
